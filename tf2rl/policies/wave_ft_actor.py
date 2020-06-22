@@ -25,9 +25,9 @@ class WaveFTActor(tf.keras.Model):
         self._squash = squash
         self._state_independent_std = state_independent_std
 
-        self.x_l1 = Dense(units[0], name="x_L1", activation=hidden_activation)
-        self.x_l2 = Dense(units[0], name="x_L2", activation=hidden_activation)
-        self.x_features = Dense(64, name="x_features")
+        self.x_l1 = Dense(128, name="x_L1", activation=hidden_activation)
+        self.x_l2 = Dense(128, name="x_L2", activation=hidden_activation)
+        self.x_features = Dense(32, name="x_features")#64
 
         # self.ft_tcn = TCN(return_sequences=False)
         # self.ft_l2 = Dense(units[1], name="ft_L2", activation=hidden_activation)
@@ -35,14 +35,14 @@ class WaveFTActor(tf.keras.Model):
         self.ft_net = compiled_tcn(return_sequences=False,
                          num_feat=6,
                          num_classes=0,
-                         nb_filters=12,
-                         kernel_size=6,
+                         nb_filters=6,#6
+                         kernel_size=6,#6
                          dilations=[2 ** i for i in range(6)],
-                         nb_stacks=2,
+                         nb_stacks=1,
                          max_len=24,
                          use_skip_connections=False,
                          regression=True,
-                         output_len=64,
+                         output_len=32,#64
                          dropout_rate=0)
 
         self.l1 = Dense(units[0], name="L1", activation=hidden_activation)
