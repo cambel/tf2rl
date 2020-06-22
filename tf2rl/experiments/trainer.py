@@ -107,6 +107,7 @@ class Trainer:
                 fps = episode_steps / (time.perf_counter() - episode_start_time)
                 self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f}".format(
                     n_episode, total_steps, episode_steps, episode_return, fps))
+                self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
                 tf.summary.scalar(
                     name="Common/training_return", data=episode_return)
 
@@ -205,6 +206,16 @@ class Trainer:
                 tf.uint8)
             tf.summary.image('train/input_img', images,)
         return avg_test_return / self._test_episodes
+
+    def _detailed_log(self, n_episode, total_steps, episode_steps, episode_return):
+        logfile = self._output_dir + '/detailed_log.npy' 
+        try:
+            tmp = np.load(logfile, allow_pickle=True).tolist()
+            tmp.append([n_episode, total_steps, episode_steps, episode_return])
+            np.save(logfile, tmp)
+        except IOError:
+            np.save(logfile, [[n_episode, total_steps, episode_steps, episode_return]])
+        pass
 
     def _set_from_args(self, args):
         # experiment settings
