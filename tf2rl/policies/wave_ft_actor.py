@@ -35,11 +35,11 @@ class WaveFTActor(tf.keras.Model):
         self.ft_net = compiled_tcn(return_sequences=False,
                          num_feat=6,
                          num_classes=0,
-                         nb_filters=6,#6
-                         kernel_size=6,#6
-                         dilations=[2 ** i for i in range(6)],
+                         nb_filters=9,#6
+                         kernel_size=3,#6
+                         dilations=[2 ** i for i in range(4)],
                          nb_stacks=1,
-                         max_len=24,
+                         max_len=12,
                          use_skip_connections=False,
                          regression=True,
                          output_len=32,#64
@@ -73,13 +73,14 @@ class WaveFTActor(tf.keras.Model):
         x_features = self.x_l2(x_features)
         x_features = self.x_features(x_features)
 
-        ft_state = tf.reshape(states[:, 26:],(-1, 24, 6))
-        # ft_state = tf.constant(states[:, 12:],shape=(1, 64, 6))
+        ft_len = int((states.shape[1] - 26) / 6)
+        # print("FT lenght", ft_len, states.shape[1])
+        ft_state = tf.reshape(states[:, 26:],(-1, ft_len, 6))
         ft_features = self.ft_net(ft_state)
         # ft_features = self.ft_tcn(ft_state)
         # ft_features = self.ft_l2(ft_features)
-        print("ft features", ft_features.shape)
-        print("x features", x_features.shape)
+        # print("ft features", ft_features.shape)
+        # print("x features", x_features.shape)
 
         features = self.l1(tf.keras.layers.Concatenate()([x_features, ft_features]))
         features = self.l2(features)
