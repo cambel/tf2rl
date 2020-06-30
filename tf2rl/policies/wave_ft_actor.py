@@ -14,7 +14,7 @@ class WaveFTActor(tf.keras.Model):
 
     def __init__(self, state_shape, action_dim, max_action,
                  units=[256, 256], hidden_activation="relu",
-                 fix_std=False, const_std=0.1,
+                 fix_std=False, const_std=0.01,
                  state_independent_std=False,
                  squash=False, name='GaussianPolicy'):
         super().__init__(name=name)
@@ -74,13 +74,10 @@ class WaveFTActor(tf.keras.Model):
         x_features = self.x_features(x_features)
 
         ft_len = int((states.shape[1] - 26) / 6)
-        # print("FT lenght", ft_len, states.shape[1])
+
         ft_state = tf.reshape(states[:, 26:],(-1, ft_len, 6))
         ft_features = self.ft_net(ft_state)
-        # ft_features = self.ft_tcn(ft_state)
-        # ft_features = self.ft_l2(ft_features)
-        # print("ft features", ft_features.shape)
-        # print("x features", x_features.shape)
+
 
         features = self.l1(tf.keras.layers.Concatenate()([x_features, ft_features]))
         features = self.l2(features)
