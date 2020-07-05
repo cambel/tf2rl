@@ -14,8 +14,8 @@ class WaveFTActor(tf.keras.Model):
 
     def __init__(self, state_shape, action_dim, max_action,
                  units=[256, 256], hidden_activation="relu",
-                 fix_std=False, const_std=0.01,
-                 state_independent_std=False,
+                 fix_std=False, const_std=0.1,
+                 state_independent_std=True,
                  squash=False, name='GaussianPolicy'):
         super().__init__(name=name)
         self.dist = DiagonalGaussian(dim=action_dim)
