@@ -18,6 +18,7 @@ class WaveFTActor(tf.keras.Model):
                  state_independent_std=True,
                  squash=False, name='GaussianPolicy'):
         super().__init__(name=name)
+        self.action_dim = action_dim
         self.dist = DiagonalGaussian(dim=action_dim)
         self._fix_std = fix_std
         self._const_std = const_std
@@ -69,13 +70,15 @@ class WaveFTActor(tf.keras.Model):
             NN outputs mean and standard deviation to compute the distribution
         :return (Dict): Multivariate normal distribution
         """
-        x_features = self.x_l1(states[:, :26])
+        # tmp = 26 #14 actions
+        tmp = 6 + 6 + self.action_dim # position + velocity + actions
+        x_features = self.x_l1(states[:, :tmp])
         x_features = self.x_l2(x_features)
         x_features = self.x_features(x_features)
 
-        ft_len = int((states.shape[1] - 26) / 6)
+        ft_len = int((states.shape[1] - tmp) / 6)
 
-        ft_state = tf.reshape(states[:, 26:],(-1, ft_len, 6))
+        ft_state = tf.reshape(states[:, tmp:],(-1, ft_len, 6))
         ft_features = self.ft_net(ft_state)
 
 
