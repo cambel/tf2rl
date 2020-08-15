@@ -71,7 +71,7 @@ class WaveFTActor(tf.keras.Model):
         :return (Dict): Multivariate normal distribution
         """
         # tmp = 26 #14 actions
-        tmp = 6 + 6 + self.action_dim # position + velocity + actions
+        tmp = 6 + 6 + 3 + self.action_dim # position + velocity + actions
         x_features = self.x_l1(states[:, :tmp])
         x_features = self.x_l2(x_features)
         x_features = self.x_features(x_features)
