@@ -27,6 +27,16 @@ class Trainer:
             env,
             args,
             test_env=None):
+        if isinstance(args, dict):
+            _args = args
+            args = policy.__class__.get_argument(Trainer.get_argument())
+            args = args.parse_args([])
+            for k, v in _args.items():
+                if hasattr(args, k):
+                    setattr(args, k, v)
+                else:
+                    raise ValueError(f"{k} is invalid parameter.")
+
         self._set_from_args(args)
         self._policy = policy
         self._env = env
@@ -65,6 +75,9 @@ class Trainer:
             self.logger.info("Restored {}".format(self._latest_path_ckpt))
 
     def __call__(self):
+        if self._evaluate:
+            self.evaluate_policy_continuously()
+
         total_steps = 0
         tf.summary.experimental.set_step(total_steps)
         episode_steps = 0
@@ -93,22 +106,23 @@ class Trainer:
             tf.summary.experimental.set_step(total_steps)
 
             done_flag = done
-            if hasattr(self._env, "_max_episode_steps") and \
-                    episode_steps == self._env._max_episode_steps:
+            if (hasattr(self._env, "_max_episode_steps") and
+                episode_steps == self._env._max_episode_steps):
                 done_flag = False
             replay_buffer.add(obs=obs, act=action,
                               next_obs=next_obs, rew=reward, done=done_flag)
             obs = next_obs
 
             if done or episode_steps == self._episode_max_steps:
+                replay_buffer.on_episode_end()
                 obs = self._env.reset()
 
                 n_episode += 1
                 fps = episode_steps / (time.perf_counter() - episode_start_time)
                 self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f}".format(
                     n_episode, total_steps, episode_steps, episode_return, fps))
-                tf.summary.scalar(
-                    name="Common/training_return", data=episode_return)
+                tf.summary.scalar(name="Common/training_return", data=episode_return)
+                tf.summary.scalar(name="Common/training_episode_length", data=episode_steps)
 
                 episode_steps = 0
                 episode_return = 0
@@ -132,11 +146,13 @@ class Trainer:
                         samples["indexes"], np.abs(td_error) + 1e-6)
 
             if total_steps % self._test_interval == 0:
-                avg_test_return = self.evaluate_policy(total_steps)
+                avg_test_return, avg_test_steps = self.evaluate_policy(total_steps)
                 self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes".format(
                     total_steps, avg_test_return, self._test_episodes))
                 tf.summary.scalar(
                     name="Common/average_test_return", data=avg_test_return)
+                tf.summary.scalar(
+                    name="Common/average_test_episode_length", data=avg_test_steps)
                 tf.summary.scalar(name="Common/fps", data=fps)
                 self.writer.flush()
 
@@ -168,6 +184,7 @@ class Trainer:
             self._test_env.normalizer.set_params(
                 *self._env.normalizer.get_params())
         avg_test_return = 0.
+        avg_test_steps = 0
         if self._save_test_path:
             replay_buffer = get_replay_buffer(
                 self._policy, self._test_env, size=self._episode_max_steps)
@@ -175,9 +192,11 @@ class Trainer:
             episode_return = 0.
             frames = []
             obs = self._test_env.reset()
+            avg_test_steps += 1
             for _ in range(self._episode_max_steps):
                 action = self._policy.get_action(obs, test=True)
                 next_obs, reward, done, _ = self._test_env.step(action)
+                avg_test_steps += 1
                 if self._save_test_path:
                     replay_buffer.add(obs=obs, act=action,
                                       next_obs=next_obs, rew=reward, done=done)
@@ -204,14 +223,14 @@ class Trainer:
                 tf.expand_dims(np.array(obs).transpose(2, 0, 1), axis=3),
                 tf.uint8)
             tf.summary.image('train/input_img', images,)
-        return avg_test_return / self._test_episodes
+        return avg_test_return / self._test_episodes, avg_test_steps / self._test_episodes
 
     def _set_from_args(self, args):
         # experiment settings
         self._max_steps = args.max_steps
-        self._episode_max_steps = args.episode_max_steps \
-            if args.episode_max_steps is not None \
-            else args.max_steps
+        self._episode_max_steps = (args.episode_max_steps
+                                   if args.episode_max_steps is not None
+                                   else args.max_steps)
         self._n_experiments = args.n_experiments
         self._show_progress = args.show_progress
         self._save_model_interval = args.save_model_interval
@@ -224,6 +243,7 @@ class Trainer:
         self._use_nstep_rb = args.use_nstep_rb
         self._n_step = args.n_step
         # test settings
+        self._evaluate = args.evaluate
         self._test_interval = args.test_interval
         self._show_test_progress = args.show_test_progress
         self._test_episodes = args.test_episodes

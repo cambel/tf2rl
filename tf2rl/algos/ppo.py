@@ -18,9 +18,7 @@ class PPO(VPG):
     def train(self, states, actions, advantages, logp_olds, returns):
         # Train actor and critic
         if self.actor_critic is not None:
-            actor_loss, critic_loss, logp_news, ratio, ent = \
-                self._train_actor_critic_body(
-                    states, actions, advantages, logp_olds, returns)
+            actor_loss, critic_loss, logp_news, ratio, ent = self._train_actor_critic_body(states, actions, advantages, logp_olds, returns)
         else:
             actor_loss, logp_news, ratio, ent = self._train_actor_body(
                 states, actions, advantages, logp_olds)
@@ -49,8 +47,7 @@ class PPO(VPG):
         return actor_loss, critic_loss
 
     @tf.function
-    def _train_actor_critic_body(
-            self, states, actions, advantages, logp_olds, returns):
+    def _train_actor_critic_body(self, states, actions, advantages, logp_olds, returns):
         with tf.device(self.device):
             with tf.GradientTape() as tape:
                 _, _, current_V = self.actor_critic(states)
@@ -74,7 +71,7 @@ class PPO(VPG):
                     raise NotImplementedError
                 # Train critic
                 td_errors = tf.squeeze(returns) - current_V
-                critic_loss = tf.reduce_mean(0.5 * tf.square(td_errors))
+                critic_loss = tf.reduce_mean(tf.square(td_errors))
                 total_loss = actor_loss + self.vfunc_coef * critic_loss
 
             grads = tape.gradient(
