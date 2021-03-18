@@ -6,6 +6,7 @@ from tensorflow.keras.layers import Dense
 from tf2rl.algos.policy_base import OffPolicyAgent
 from tf2rl.misc.target_update_ops import update_target_variables
 from tf2rl.policies.tfp_gaussian_actor import GaussianActor
+from tf2rl.policies.tfp_wave_actor import WaveFTActor
 
 
 class CriticQ(tf.keras.Model):
@@ -46,6 +47,7 @@ class SAC(OffPolicyAgent):
             self,
             state_shape,
             action_dim,
+            actor_class="default",
             name="SAC",
             max_action=1.,
             lr=3e-4,
@@ -85,6 +87,7 @@ class SAC(OffPolicyAgent):
         super().__init__(
             name=name, memory_capacity=memory_capacity, n_warmup=n_warmup, **kwargs)
 
+        self._actor_class = actor_class
         self._setup_actor(state_shape, action_dim, actor_units, lr, max_action)
         self._setup_critic_q(state_shape, action_dim, critic_units, lr)
 
@@ -106,8 +109,13 @@ class SAC(OffPolicyAgent):
         self.state_ndim = len(state_shape)
 
     def _setup_actor(self, state_shape, action_dim, actor_units, lr, max_action=1.):
-        self.actor = GaussianActor(
+        if self._actor_class == 'default':
+            self.actor = GaussianActor(
             state_shape, action_dim, max_action, squash=True, units=actor_units)
+        elif self._actor_class == 'wave':
+            self.actor = WaveFTActor(state_shape, action_dim, max_action, squash=True,units=actor_units)
+        else:
+            raise Exception("Invalid actor class")
         self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
     def _setup_critic_q(self, state_shape, action_dim, critic_units, lr):
