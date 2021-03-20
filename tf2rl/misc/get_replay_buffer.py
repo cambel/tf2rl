@@ -1,4 +1,5 @@
 import numpy as np
+import pickle 
 from gym.spaces.box import Box
 from gym.spaces.discrete import Discrete
 
@@ -6,6 +7,18 @@ from cpprb import ReplayBuffer, PrioritizedReplayBuffer
 
 from tf2rl.algos.policy_base import OffPolicyAgent
 from tf2rl.envs.utils import is_discrete
+
+
+def save_replay_buffer(replay_buffer, save_path):
+    with open(save_path, 'wb') as output:
+        tmp = replay_buffer.get_all_transitions()
+        pickle.dump(tmp, output)
+
+def restore_replay_buffer(save_path):
+    replay_buffer = None
+    with open(save_path, 'rb') as input:
+        replay_buffer = pickle.load(input)
+    return replay_buffer
 
 
 def get_space_size(space):

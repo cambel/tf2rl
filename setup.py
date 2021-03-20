@@ -15,6 +15,7 @@ try:
     import tensorflow as tf
 
     tf_version = tf.version.VERSION.rsplit('.', 1)[0]
+    print("current tf version", tf_version)
 except ImportError:
     install_requires.append(f"tensorflow=={tf_version}")
     pass
