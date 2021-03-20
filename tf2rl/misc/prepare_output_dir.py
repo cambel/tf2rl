@@ -33,6 +33,7 @@ import argparse
 import datetime
 import json
 import os
+os.umask(0)
 import subprocess
 import sys
 import tempfile
@@ -101,7 +102,7 @@ def prepare_output_dir(args, user_specified_dir=None, argv=None,
         if os.path.exists(outdir):
             raise RuntimeError('{} exists'.format(outdir))
         else:
-            os.makedirs(outdir)
+            os.makedirs(outdir, mode=0o777)
     else:
         outdir = tempfile.mkdtemp(prefix=time_str)
 
