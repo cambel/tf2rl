@@ -141,12 +141,24 @@ class Trainer:
                 episode_steps = 0
                 episode_return = 0
                 episode_start_time = time.perf_counter()
+            elif self._policy.update_interval != 1 and total_steps % self._policy.update_interval == 0:
+                # Do not update every episode (too slow?)
+                samples = replay_buffer.sample(self._policy.batch_size)
+                with tf.summary.record_if(total_steps % self._save_summary_interval == 0):
+                    self._policy.train(
+                        samples["obs"], samples["act"], samples["next_obs"],
+                        samples["rew"], np.array(samples["done"], dtype=np.float32),
+                        None if not self._use_prioritized_rb else samples["weights"])
+                if self._use_prioritized_rb:
+                    td_error = self._policy.compute_td_error(
+                        samples["obs"], samples["act"], samples["next_obs"],
+                        samples["rew"], np.array(samples["done"], dtype=np.float32))
+                    replay_buffer.update_priorities(
+                        samples["indexes"], np.abs(td_error) + 1e-6)
 
             if total_steps < self._policy.n_warmup:
                 continue
 
-            # if total_steps % self._policy.update_interval == 0:
-            #     self.update_policy(replay_buffer, total_steps)
 
             if total_steps % self._test_interval == 0:
                 avg_test_return, avg_test_steps = self.evaluate_policy(total_steps)
@@ -276,6 +288,7 @@ class Trainer:
         self._save_test_path = args.save_test_path
         self._save_test_movie = args.save_test_movie
         self._show_test_images = args.show_test_images
+        #\
 
     @staticmethod
     def get_argument(parser=None):
