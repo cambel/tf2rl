@@ -21,7 +21,7 @@ except ImportError:
     pass
 
 compatible_tfp = {"2.7": ["tensorflow-probability~=0.15.0"],
-compatible_tfp = {"2.4": ["tensorflow-probability~=0.12.0"],
+                  "2.4": ["tensorflow-probability~=0.12.0"],
                   "2.3": ["tensorflow-probability~=0.11.0"],
                   "2.2": ["tensorflow-probability~=0.10.0"],
                   "2.1": ["tensorflow-probability~=0.8.0"],
