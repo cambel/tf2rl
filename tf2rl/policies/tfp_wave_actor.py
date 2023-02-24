@@ -7,7 +7,7 @@ from tf2rl.policies.tcn import compiled_tcn
 layers = tf.keras.layers
 
 class WaveFTActor(tf.keras.Model):
-    LOG_STD_CAP_MAX = -2  # np.e**-1 = 0.3679 || np.e**2 = 7.389
+    LOG_STD_CAP_MAX = 0  # np.e**0 = 1.0 || np.e**-1 = 0.3679 || np.e**2 = 7.389 // 0 may be the best as my actions are bounded from [-1,1]
     LOG_STD_CAP_MIN = -20  # np.e**-10 = 4.540e-05
     EPS = 1e-6
 

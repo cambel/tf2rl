@@ -171,8 +171,10 @@ class Trainer:
                 n_episode += 1
                 fps = episode_steps / (time.perf_counter() - episode_start_time)
                 hz = 1. / ((time.perf_counter() - episode_start_time) / episode_steps)
-                self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} HZ {5:5.2f}".format(
-                    n_episode, total_steps, episode_steps, episode_return, fps, hz))
+                self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Epi. Steps: {2: 5} Return: {3: 5.2f}".format(
+                    n_episode, total_steps, episode_steps, round(episode_return, 1)))
+                # self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} HZ {5:5.2f}".format(
+                #     n_episode, total_steps, episode_steps, episode_return, fps, hz))
                 self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
                 tf.summary.scalar(name="Common/training_return", data=episode_return)
                 tf.summary.scalar(name="Common/training_episode_length", data=episode_steps)
@@ -180,7 +182,7 @@ class Trainer:
                 episode_steps = 0
                 episode_return = 0
                 episode_start_time = time.perf_counter()
-            elif self._policy.update_interval != 1 and total_steps % self._policy.update_interval == 0:
+            elif self._policy.update_interval != 0 and total_steps % self._policy.update_interval == 0:
                 # Do not update every episode (too slow?)
                 # self.logger.info("updating...")
                 self.update_policy(replay_buffer, total_steps)
@@ -201,7 +203,8 @@ class Trainer:
 
             if total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
-
+        # Save at the end of the session
+        self.checkpoint_manager.save()
         tf.summary.flush()
 
     def update_policy(self, replay_buffer, total_steps):
