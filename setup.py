@@ -8,7 +8,8 @@ install_requires = [
     "joblib",
     "future",
     "scipy",
-    "scikit-image"]
+    "scikit-image",
+    "gym[atari]==0.17.0"]
 
 tf_version = "2.4"  # Default Version
 try:
