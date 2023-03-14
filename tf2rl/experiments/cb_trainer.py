@@ -48,6 +48,7 @@ class Trainer:
         * ``--n-step`` (int): Number of steps for nstep experience reward. The default is ``4``
         * ``--logging-level`` (DEBUG, INFO, WARNING): Choose logging level. The default is ``INFO``
     """
+
     def __init__(
             self,
             policy,
@@ -89,7 +90,7 @@ class Trainer:
         self.logger = initialize_logger(
             logging_level=logging.getLevelName(args.logging_level),
             output_dir=self._output_dir)
-        
+
         if self._model_dir is None:
             self.replay_buffer_path = self._output_dir + '/replay_buffer.pkl'
         else:
@@ -155,41 +156,39 @@ class Trainer:
 
             done_flag = done
             if (hasattr(self._env, "_max_episode_steps") and
-                episode_steps == self._env._max_episode_steps):
+                    episode_steps == self._env._max_episode_steps):
                 done_flag = False
             replay_buffer.add(obs=obs, act=action,
                               next_obs=next_obs, rew=reward, done=done_flag)
             obs = next_obs
 
             if done or episode_steps == self._episode_max_steps:
-                self.update_policy(replay_buffer, total_steps)
-                replay_buffer.on_episode_end()
-                save_replay_buffer(replay_buffer, self.replay_buffer_path)
-                
-                obs = self._env.reset()
-
                 n_episode += 1
                 fps = episode_steps / (time.perf_counter() - episode_start_time)
-                hz = 1. / ((time.perf_counter() - episode_start_time) / episode_steps)
-                self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Epi. Steps: {2: 5} Return: {3: 5.2f}".format(
-                    n_episode, total_steps, episode_steps, round(episode_return, 1)))
-                # self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} HZ {5:5.2f}".format(
-                #     n_episode, total_steps, episode_steps, episode_return, fps, hz))
+                hz = ((time.perf_counter() - episode_start_time) / episode_steps)
+                self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} dt {5:5.2f}".format(
+                    n_episode, total_steps, episode_steps, episode_return, fps, hz))
                 self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
                 tf.summary.scalar(name="Common/training_return", data=episode_return)
                 tf.summary.scalar(name="Common/training_episode_length", data=episode_steps)
+                
+                obs = self._env.reset()
+                
+                # Update policy if defined to do so
+                if self._policy.update_interval == 0:
+                    self.update_policy(replay_buffer, save_summary=True)
+                replay_buffer.on_episode_end()
+                # Save replay buffer
+                save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
                 episode_steps = 0
                 episode_return = 0
                 episode_start_time = time.perf_counter()
             elif self._policy.update_interval != 0 and total_steps % self._policy.update_interval == 0:
-                # Do not update every episode (too slow?)
-                # self.logger.info("updating...")
-                self.update_policy(replay_buffer, total_steps)
+                self.update_policy(replay_buffer, save_summary=(total_steps % self._save_summary_interval == 0))
 
             if total_steps < self._policy.n_warmup:
                 continue
-
 
             if total_steps % self._test_interval == 0:
                 avg_test_return, avg_test_steps = self.evaluate_policy(total_steps)
@@ -203,13 +202,12 @@ class Trainer:
 
             if total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
-        # Save at the end of the session
-        self.checkpoint_manager.save()
+
         tf.summary.flush()
 
-    def update_policy(self, replay_buffer, total_steps):
+    def update_policy(self, replay_buffer, save_summary=False):
         samples = replay_buffer.sample(self._policy.batch_size)
-        with tf.summary.record_if(total_steps % self._save_summary_interval == 0):
+        with tf.summary.record_if(save_summary):
             self._policy.train(
                 samples["obs"], samples["act"], samples["next_obs"],
                 samples["rew"], np.array(samples["done"], dtype=np.float32),
