@@ -6,7 +6,7 @@ layers = tf.keras.layers
 
 
 class GaussianActor(tf.keras.Model):
-    LOG_STD_CAP_MAX = 2  # np.e**2 = 7.389
+    LOG_STD_CAP_MAX = 0  # np.e**2 = 7.389
     LOG_STD_CAP_MIN = -20  # np.e**-10 = 4.540e-05
     EPS = 1e-6
 

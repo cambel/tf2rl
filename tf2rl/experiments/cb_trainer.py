@@ -1,5 +1,6 @@
 import os
 import time
+import rospy
 import logging
 import argparse
 
@@ -54,6 +55,7 @@ class Trainer:
             policy,
             env,
             args,
+            seed=0,
             test_env=None):
         """
         Initialize Trainer class
@@ -73,6 +75,8 @@ class Trainer:
                     setattr(args, k, v)
                 else:
                     raise ValueError(f"{k} is invalid parameter.")
+        
+        tf.random.set_seed(seed)
 
         self._set_from_args(args)
         self._policy = policy
@@ -127,7 +131,7 @@ class Trainer:
         tf.summary.experimental.set_step(total_steps)
         episode_steps = 0
         episode_return = 0
-        episode_start_time = time.perf_counter()
+        episode_start_time = rospy.get_time()
         n_episode = 0
 
         replay_buffer = get_replay_buffer(
@@ -147,6 +151,7 @@ class Trainer:
                 action = self._policy.get_action(obs)
 
             next_obs, reward, done, _ = self._env.step(action)
+
             if self._show_progress:
                 self._env.render()
             episode_steps += 1
@@ -202,6 +207,7 @@ class Trainer:
 
             if total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
+
 
         tf.summary.flush()
 
