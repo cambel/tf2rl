@@ -3,13 +3,6 @@ from logging import getLogger
 import gym
 from gym.spaces import Discrete, Box
 
-try:
-    # gym >= 0.21.0
-    from gym.envs.atari import AtariEnv
-except ImportError:
-    # gym < 0.21.0
-    from gym.envs.atari.atari_env import AtariEnv
-
 
 logger = getLogger(__file__)
 
@@ -39,6 +32,12 @@ def is_mujoco_env(env):
 
 
 def is_atari_env(env):
+    try:
+        # gym >= 0.21.0
+        from gym.envs.atari import AtariEnv
+    except ImportError:
+        # gym < 0.21.0
+        from gym.envs.atari.atari_env import AtariEnv
     if not hasattr(env, "env"):
         return False
     return AtariEnv == env.env.__class__
