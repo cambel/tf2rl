@@ -295,7 +295,7 @@ class Trainer:
             tmp = np.load(logfile, allow_pickle=True).tolist()
             tmp.append([n_episode, total_steps, episode_steps, episode_return])
             np.save(logfile, tmp)
-        except IOError:
+        except FileNotFoundError:
             np.save(logfile, [[n_episode, total_steps, episode_steps, episode_return]])
         pass
 
