@@ -91,8 +91,10 @@ def prepare_output_dir(args, user_specified_dir=None, argv=None,
     :return: Path of the output directory created by this function (str).
     """
     if suffix is not "":
-        suffix = "_" + suffix
-    time_str = datetime.datetime.now().strftime(time_format) + suffix
+        time_str = suffix
+    else:
+        time_str = datetime.datetime.now().strftime(time_format)
+
     if user_specified_dir is not None:
         if os.path.exists(user_specified_dir):
             if not os.path.isdir(user_specified_dir):

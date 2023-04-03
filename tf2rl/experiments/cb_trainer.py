@@ -196,7 +196,7 @@ class Trainer:
                 continue
 
             if total_steps % self._test_interval == 0:
-                avg_test_return, avg_test_steps = self.evaluate_policy(total_steps)
+                avg_test_return, avg_test_steps, success_rate = self.evaluate_policy(total_steps)
                 self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes".format(
                     total_steps, avg_test_return, self._test_episodes))
                 tf.summary.scalar(
@@ -204,6 +204,7 @@ class Trainer:
                 tf.summary.scalar(
                     name="Common/average_test_episode_length", data=avg_test_steps)
                 tf.summary.scalar(name="Common/fps", data=fps)
+                tf.summary.scalar(name="Common/success_rate", data=success_rate)
 
             if total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
@@ -249,6 +250,7 @@ class Trainer:
                 *self._env.normalizer.get_params())
         avg_test_return = 0.
         avg_test_steps = 0
+        successes = 0.
         if self._save_test_path:
             replay_buffer = get_replay_buffer(
                 self._policy, self._test_env, size=self._episode_max_steps)
@@ -259,7 +261,9 @@ class Trainer:
             avg_test_steps += 1
             for _ in range(self._episode_max_steps):
                 action = self._policy.get_action(obs, test=True)
-                next_obs, reward, done, _ = self._test_env.step(action)
+                next_obs, reward, done, info = self._test_env.step(action)
+                if info.get("success", False):
+                    successes += 1
                 avg_test_steps += 1
                 if self._save_test_path:
                     replay_buffer.add(obs=obs, act=action,
@@ -287,7 +291,7 @@ class Trainer:
                 tf.expand_dims(np.array(obs).transpose(2, 0, 1), axis=3),
                 tf.uint8)
             tf.summary.image('train/input_img', images,)
-        return avg_test_return / self._test_episodes, avg_test_steps / self._test_episodes
+        return avg_test_return / self._test_episodes, avg_test_steps / self._test_episodes, successes / self._test_episodes
 
     def _detailed_log(self, n_episode, total_steps, episode_steps, episode_return):
         logfile = self._output_dir + '/detailed_log.npy'
