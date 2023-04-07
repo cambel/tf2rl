@@ -196,6 +196,7 @@ class Trainer:
                 continue
 
             if total_steps % self._test_interval == 0:
+                print('=============== TESTING POLICY =================')
                 avg_test_return, avg_test_steps, success_rate = self.evaluate_policy(total_steps)
                 self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes".format(
                     total_steps, avg_test_return, self._test_episodes))
@@ -205,6 +206,10 @@ class Trainer:
                     name="Common/average_test_episode_length", data=avg_test_steps)
                 tf.summary.scalar(name="Common/fps", data=fps)
                 tf.summary.scalar(name="Common/success_rate", data=success_rate)
+                print('=============== END OF TESTING =================')
+                
+                # Start a new episode
+                obs = self._env.reset()
 
             if total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
@@ -259,7 +264,7 @@ class Trainer:
             frames = []
             obs = self._test_env.reset()
             avg_test_steps += 1
-            for _ in range(self._episode_max_steps):
+            for j in range(self._episode_max_steps):
                 action = self._policy.get_action(obs, test=True)
                 next_obs, reward, done, info = self._test_env.step(action)
                 if info.get("success", False):
@@ -277,8 +282,8 @@ class Trainer:
                 obs = next_obs
                 if done:
                     break
-            prefix = "step_{0:08d}_epi_{1:02d}_return_{2:010.4f}".format(
-                total_steps, i, episode_return)
+            print('Test episode {0: 3} steps {1: 4} return {2:8.2f}'.format(i, j, episode_return))
+            prefix = "step_{0:08d}_epi_{1:02d}_return_{2:010.4f}".format(total_steps, i, episode_return)
             if self._save_test_path:
                 save_path(replay_buffer._encode_sample(np.arange(self._episode_max_steps)),
                           os.path.join(self._output_dir, prefix + ".pkl"))
