@@ -56,7 +56,8 @@ class Trainer:
             env,
             args,
             seed=0,
-            test_env=None):
+            test_env=None,
+            teacher_policy=False):
         """
         Initialize Trainer class
 
@@ -82,6 +83,7 @@ class Trainer:
         self._policy = policy
         self._env = env
         self._test_env = self._env if test_env is None else test_env
+        self._teacher_policy = teacher_policy
         if self._normalize_obs:
             assert isinstance(env.observation_space, Box)
             self._obs_normalizer = EmpiricalNormalizer(
@@ -90,7 +92,7 @@ class Trainer:
         # prepare log directory
         self._output_dir = prepare_output_dir(
             args=args, user_specified_dir=self._logdir,
-            suffix="{}_{}".format(self._policy.policy_name, args.dir_suffix))
+            suffix="{}_{}".format(self._policy.policy_name, args.dir_suffix), only_suffix=bool(args.dir_suffix))
         self.logger = initialize_logger(
             logging_level=logging.getLevelName(args.logging_level),
             output_dir=self._output_dir)
@@ -144,18 +146,40 @@ class Trainer:
 
         obs = self._env.reset()
 
-        while total_steps < self._max_steps:
-            if total_steps < self._policy.n_warmup:
-                action = self._env.action_space.sample()
-            else:
-                action = self._policy.get_action(obs)
+        teaching_mode = False
 
-            next_obs, reward, done, _ = self._env.step(action)
+        while total_steps < self._max_steps:
+            # Call the teacher policy here
+            if self._teacher_policy and teaching_mode:
+                action = np.ones(self._env.n_actions)
+                action[:6] *= 1.0 # Slow motion
+
+                ## Fix policy
+                # action[2] = -0.75
+                
+                # Two step policy
+                xy_error = obs[:2]
+                # print(round(np.linalg.norm(xy_error), 4))
+                if np.linalg.norm(xy_error) < .04:
+                    action[2] = -0.25
+                    action[6:] *= -0.5 # Half compliance
+                else:
+                    action[2] = -0.9
+                    action[8] = 1.0 # High compliance
+                    action[6:] *= 0.5
+
+            else:
+                if total_steps < self._policy.n_warmup:
+                    action = self._env.action_space.sample()
+                else:
+                    action = self._policy.get_action(obs)
+
+            next_obs, reward, done, info = self._env.step(action)
 
             if self._show_progress:
                 self._env.render()
             episode_steps += 1
-            episode_return += reward
+            episode_return += reward if not teaching_mode else 0
             total_steps += 1
             tf.summary.experimental.set_step(total_steps)
 
@@ -167,7 +191,17 @@ class Trainer:
                               next_obs=next_obs, rew=reward, done=done_flag)
             obs = next_obs
 
-            if done or episode_steps == self._episode_max_steps:
+            collision = info.get("collision", False)
+
+            if self._teacher_policy:
+                if collision and not teaching_mode: # start teaching mode on collision
+                    teaching_mode = True
+                    print('\033[36m' + "*** TEACHING MODE ON***" + '\033[0m')
+                elif teaching_mode and (collision or done): # stop if there is another collision or if the task is completed when in teaching mode
+                    teaching_mode = False
+                    print('\033[36m' + "*** TEACHING MODE OFF***" + '\033[0m')
+
+            if (done and not teaching_mode) or episode_steps == self._episode_max_steps:
                 n_episode += 1
                 fps = episode_steps / (time.perf_counter() - episode_start_time)
                 hz = ((time.perf_counter() - episode_start_time) / episode_steps)

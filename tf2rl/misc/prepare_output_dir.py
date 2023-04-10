@@ -65,7 +65,7 @@ def is_under_git_control():
 
 
 def prepare_output_dir(args, user_specified_dir=None, argv=None,
-                       time_format='%Y%m%dT%H%M%S.%f', suffix=""):
+                       time_format='%Y%m%dT%H%M%S.%f', suffix="", only_suffix=False):
     """
     Prepare a directory for outputting training results.
     An output directory, which ends with the current datetime string,
@@ -90,10 +90,10 @@ def prepare_output_dir(args, user_specified_dir=None, argv=None,
     :param default format is the basic format of ISO 8601.
     :return: Path of the output directory created by this function (str).
     """
-    if suffix is not "":
+    if only_suffix:
         time_str = suffix
     else:
-        time_str = datetime.datetime.now().strftime(time_format)
+        time_str = datetime.datetime.now().strftime(time_format) + "_" + suffix
 
     if user_specified_dir is not None:
         if os.path.exists(user_specified_dir):
