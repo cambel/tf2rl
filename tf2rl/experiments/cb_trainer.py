@@ -57,7 +57,8 @@ class Trainer:
             args,
             seed=0,
             test_env=None,
-            teacher_policy=False):
+            teacher_policy=False,
+            save_best_policy=False):
         """
         Initialize Trainer class
 
@@ -84,6 +85,7 @@ class Trainer:
         self._env = env
         self._test_env = self._env if test_env is None else test_env
         self._teacher_policy = teacher_policy
+        self._save_best_policy = save_best_policy
         if self._normalize_obs:
             assert isinstance(env.observation_space, Box)
             self._obs_normalizer = EmpiricalNormalizer(
@@ -115,7 +117,7 @@ class Trainer:
         self._checkpoint = tf.train.Checkpoint(policy=self._policy)
         self.checkpoint_manager = tf.train.CheckpointManager(
             self._checkpoint, directory=self._output_dir, max_to_keep=5)
-
+        
         if model_dir is not None:
             assert os.path.isdir(model_dir)
             self._latest_path_ckpt = tf.train.latest_checkpoint(model_dir)
@@ -128,6 +130,8 @@ class Trainer:
         """
         if self._evaluate:
             self.evaluate_policy_continuously()
+
+        best_test_score = -np.inf
 
         total_steps = 0
         tf.summary.experimental.set_step(total_steps)
@@ -160,7 +164,7 @@ class Trainer:
                 # Two step policy
                 xy_error = obs[:2]
                 # print(round(np.linalg.norm(xy_error), 4))
-                if np.linalg.norm(xy_error) < .04:
+                if np.linalg.norm(xy_error) < .02:
                     action[2] = -0.25
                     action[6:] *= -0.5 # Half compliance
                 else:
@@ -241,11 +245,17 @@ class Trainer:
                 tf.summary.scalar(name="Common/fps", data=fps)
                 tf.summary.scalar(name="Common/success_rate", data=success_rate)
                 print('=============== END OF TESTING =================')
+
+                if self._save_best_policy:
+                    test_score = avg_test_return + (success_rate * 100)
+                    if best_test_score < test_score:
+                        self.checkpoint_manager.save()
+                        best_test_score = test_score        
                 
                 # Start a new episode
                 obs = self._env.reset()
 
-            if total_steps % self._save_model_interval == 0:
+            if not self._save_best_policy and total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
 
 
@@ -316,7 +326,7 @@ class Trainer:
                 obs = next_obs
                 if done:
                     break
-            print('Test episode {0: 3} steps {1: 4} return {2:8.2f}'.format(i, j, episode_return))
+            print('Test episode {0: 3} steps {1: 4} return {2:8.2f}'.format(i+1, j, episode_return))
             prefix = "step_{0:08d}_epi_{1:02d}_return_{2:010.4f}".format(total_steps, i, episode_return)
             if self._save_test_path:
                 save_path(replay_buffer._encode_sample(np.arange(self._episode_max_steps)),
