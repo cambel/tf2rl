@@ -85,6 +85,8 @@ class Trainer:
         self._env = env
         self._test_env = self._env if test_env is None else test_env
         self._teacher_policy = teacher_policy
+        print("Teaching mode", teacher_policy)
+        print("Save best policy mode", save_best_policy)
         self._save_best_policy = save_best_policy
         if self._normalize_obs:
             assert isinstance(env.observation_space, Box)
@@ -249,6 +251,7 @@ class Trainer:
                 if self._save_best_policy:
                     test_score = avg_test_return + (success_rate * 100)
                     if best_test_score < test_score:
+                        print('*** Saving New Best Policy ***')
                         self.checkpoint_manager.save()
                         best_test_score = test_score        
                 
