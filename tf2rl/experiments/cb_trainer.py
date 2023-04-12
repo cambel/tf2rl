@@ -154,6 +154,8 @@ class Trainer:
 
         teaching_mode = False
 
+        actual_episode_steps = 0
+
         while total_steps < self._max_steps:
             # Call the teacher policy here
             if self._teacher_policy and teaching_mode:
@@ -187,6 +189,9 @@ class Trainer:
             episode_steps += 1
             episode_return += reward if not teaching_mode else 0
             total_steps += 1
+            
+            actual_episode_steps += 1 if not teaching_mode else 0
+            
             tf.summary.experimental.set_step(total_steps)
 
             done_flag = done
@@ -198,6 +203,7 @@ class Trainer:
             obs = next_obs
 
             collision = info.get("collision", False)
+            success = info.get("success", False)
 
             if self._teacher_policy:
                 if collision and not teaching_mode: # start teaching mode on collision
@@ -212,10 +218,18 @@ class Trainer:
                 fps = episode_steps / (time.perf_counter() - episode_start_time)
                 hz = ((time.perf_counter() - episode_start_time) / episode_steps)
                 self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} dt {5:5.2f}".format(
-                    n_episode, total_steps, episode_steps, episode_return, fps, hz))
+                    n_episode, total_steps, actual_episode_steps, episode_return, fps, hz))
                 self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
                 tf.summary.scalar(name="Common/training_return", data=episode_return)
-                tf.summary.scalar(name="Common/training_episode_length", data=episode_steps)
+                tf.summary.scalar(name="Common/training_episode_length", data=actual_episode_steps)
+
+                if collision:
+                    performance_metric = -self._episode_max_steps * 2
+                elif success:
+                    performance_metric = self._episode_max_steps - actual_episode_steps
+                else:
+                    performance_metric = -self._episode_max_steps
+                tf.summary.scalar(name="Common/performance_metric", data=performance_metric)
                 
                 obs = self._env.reset()
                 
@@ -228,7 +242,9 @@ class Trainer:
 
                 episode_steps = 0
                 episode_return = 0
+                actual_episode_steps = 0
                 episode_start_time = time.perf_counter()
+
             elif self._policy.update_interval != 0 and total_steps % self._policy.update_interval == 0:
                 self.update_policy(replay_buffer, save_summary=(total_steps % self._save_summary_interval == 0))
 
@@ -303,6 +319,7 @@ class Trainer:
         avg_test_return = 0.
         avg_test_steps = 0
         successes = 0.
+        collisions = 0
         if self._save_test_path:
             replay_buffer = get_replay_buffer(
                 self._policy, self._test_env, size=self._episode_max_steps)
@@ -329,6 +346,14 @@ class Trainer:
                 obs = next_obs
                 if done:
                     break
+            if info.get("collision", False):
+                collisions += 1
+                performance_metric = -self._episode_max_steps * 2
+            elif info.get("success", False):
+                performance_metric = self._episode_max_steps - j
+            else:
+                performance_metric = -self._episode_max_steps
+            tf.summary.scalar(name="Common/test_performance_metric", data=performance_metric)
             print('Test episode {0: 3} steps {1: 4} return {2:8.2f}'.format(i+1, j, episode_return))
             prefix = "step_{0:08d}_epi_{1:02d}_return_{2:010.4f}".format(total_steps, i, episode_return)
             if self._save_test_path:
@@ -343,6 +368,7 @@ class Trainer:
                 tf.expand_dims(np.array(obs).transpose(2, 0, 1), axis=3),
                 tf.uint8)
             tf.summary.image('train/input_img', images,)
+        tf.summary.scalar(name="Common/test_collisions", data=collisions)
         return avg_test_return / self._test_episodes, avg_test_steps / self._test_episodes, successes / self._test_episodes
 
     def _detailed_log(self, n_episode, total_steps, episode_steps, episode_return):
