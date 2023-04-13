@@ -320,6 +320,7 @@ class Trainer:
         avg_test_steps = 0
         successes = 0.
         collisions = 0
+        performance_metric = 0.
         if self._save_test_path:
             replay_buffer = get_replay_buffer(
                 self._policy, self._test_env, size=self._episode_max_steps)
@@ -348,12 +349,11 @@ class Trainer:
                     break
             if info.get("collision", False):
                 collisions += 1
-                performance_metric = -self._episode_max_steps * 2
+                performance_metric += -self._episode_max_steps * 2
             elif info.get("success", False):
-                performance_metric = self._episode_max_steps - j
+                performance_metric += self._episode_max_steps - j
             else:
-                performance_metric = -self._episode_max_steps
-            tf.summary.scalar(name="Common/test_performance_metric", data=performance_metric)
+                performance_metric += -self._episode_max_steps
             print('Test episode {0: 3} steps {1: 4} return {2:8.2f}'.format(i+1, j, episode_return))
             prefix = "step_{0:08d}_epi_{1:02d}_return_{2:010.4f}".format(total_steps, i, episode_return)
             if self._save_test_path:
@@ -368,6 +368,7 @@ class Trainer:
                 tf.expand_dims(np.array(obs).transpose(2, 0, 1), axis=3),
                 tf.uint8)
             tf.summary.image('train/input_img', images,)
+        tf.summary.scalar(name="Common/test_performance_metric", data=performance_metric/self._test_episodes)
         tf.summary.scalar(name="Common/test_collisions", data=collisions)
         return avg_test_return / self._test_episodes, avg_test_steps / self._test_episodes, successes / self._test_episodes
 
