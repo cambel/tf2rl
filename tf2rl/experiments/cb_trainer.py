@@ -277,6 +277,7 @@ class Trainer:
             if not self._save_best_policy and total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
 
+        self.checkpoint_manager.save(999)
 
         tf.summary.flush()
 
