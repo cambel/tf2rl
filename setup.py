@@ -11,7 +11,7 @@ install_requires = [
     "scikit-image",
     "gym[atari]==0.17.0"]
 
-tf_version = "2.4"  # Default Version
+tf_version = "2.7"  # Default Version
 try:
     import tensorflow as tf
 
