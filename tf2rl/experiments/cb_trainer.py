@@ -96,6 +96,7 @@ class Trainer:
         # prepare log directory
         self._output_dir = prepare_output_dir(
             args=args, user_specified_dir=self._logdir,
+            time_format='S.%f',
             suffix="{}_{}".format(self._policy.policy_name, args.dir_suffix), only_suffix=bool(args.dir_suffix))
         self.logger = initialize_logger(
             logging_level=logging.getLevelName(args.logging_level),
