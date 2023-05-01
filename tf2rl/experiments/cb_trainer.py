@@ -97,7 +97,7 @@ class Trainer:
         self._output_dir = prepare_output_dir(
             args=args, user_specified_dir=self._logdir,
             time_format='S.%f',
-            suffix="{}_{}".format(self._policy.policy_name, args.dir_suffix), only_suffix=bool(args.dir_suffix))
+            suffix="{}_{}".format(self._policy.policy_name, args.dir_suffix))
         self.logger = initialize_logger(
             logging_level=logging.getLevelName(args.logging_level),
             output_dir=self._output_dir)
@@ -140,22 +140,23 @@ class Trainer:
         tf.summary.experimental.set_step(total_steps)
         episode_steps = 0
         episode_return = 0
-        episode_start_time = rospy.get_time()
+        episode_start_time = time.perf_counter()
         n_episode = 0
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
             self._use_nstep_rb, self._n_step)
 
-        if os.path.exists(self.replay_buffer_path):
-            print("Restoring reply buffer")
-            replay_buffer.add(**restore_replay_buffer(self.replay_buffer_path))
+        # if os.path.exists(self.replay_buffer_path):
+        #     print("Restoring reply buffer")
+        #     replay_buffer.add(**restore_replay_buffer(self.replay_buffer_path))
 
         obs = self._env.reset()
 
         teaching_mode = False
 
         actual_episode_steps = 0
+        total_agent_control_time = 0.0
 
         while total_steps < self._max_steps:
             # Call the teacher policy here
@@ -170,12 +171,12 @@ class Trainer:
                 xy_error = obs[:2]
                 # print(round(np.linalg.norm(xy_error), 4))
                 if np.linalg.norm(xy_error) < .02:
-                    action[2] = -0.25
+                    action[2] = -0.0
                     action[6:] *= -0.5 # Half compliance
                 else:
                     action[2] = -0.9
                     action[8] = 1.0 # High compliance
-                    action[6:] *= 0.5
+                    action[6:] *= 0.75
 
             else:
                 if total_steps < self._policy.n_warmup:
@@ -183,7 +184,9 @@ class Trainer:
                 else:
                     action = self._policy.get_action(obs)
 
+            st = rospy.get_time()
             next_obs, reward, done, info = self._env.step(action)
+            total_agent_control_time += rospy.get_time() - st
 
             if self._show_progress:
                 self._env.render()
@@ -216,10 +219,11 @@ class Trainer:
 
             if (done and not teaching_mode) or episode_steps == self._episode_max_steps:
                 n_episode += 1
-                fps = episode_steps / (time.perf_counter() - episode_start_time)
-                hz = ((time.perf_counter() - episode_start_time) / episode_steps)
+                total_episode_time = time.perf_counter() - episode_start_time
+                policy_time = (total_episode_time - total_agent_control_time) / episode_steps
+                time_per_step = (total_agent_control_time / episode_steps)
                 self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} dt {5:5.2f}".format(
-                    n_episode, total_steps, actual_episode_steps, episode_return, fps, hz))
+                    n_episode, total_steps, actual_episode_steps, episode_return, policy_time, time_per_step))
                 self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
                 tf.summary.scalar(name="Common/training_return", data=episode_return)
                 tf.summary.scalar(name="Common/training_episode_length", data=actual_episode_steps)
@@ -239,12 +243,13 @@ class Trainer:
                     self.update_policy(replay_buffer, save_summary=True)
                 replay_buffer.on_episode_end()
                 # Save replay buffer
-                save_replay_buffer(replay_buffer, self.replay_buffer_path)
+                # save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
                 episode_steps = 0
                 episode_return = 0
                 actual_episode_steps = 0
                 episode_start_time = time.perf_counter()
+                total_agent_control_time = 0.0
 
             elif self._policy.update_interval != 0 and total_steps % self._policy.update_interval == 0:
                 self.update_policy(replay_buffer, save_summary=(total_steps % self._save_summary_interval == 0))
@@ -261,7 +266,8 @@ class Trainer:
                     name="Common/average_test_return", data=avg_test_return)
                 tf.summary.scalar(
                     name="Common/average_test_episode_length", data=avg_test_steps)
-                tf.summary.scalar(name="Common/fps", data=fps)
+                tf.summary.scalar(name="Common/fps", data=1./(policy_time+time_per_step))
+                tf.summary.scalar(name="Common/agent_hz", data=1./time_per_step)
                 tf.summary.scalar(name="Common/success_rate", data=success_rate)
                 print('=============== END OF TESTING =================')
 
