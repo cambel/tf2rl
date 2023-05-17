@@ -146,7 +146,8 @@ class Trainer:
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
             self._use_nstep_rb, self._n_step, 
-            use_mmap=True, use_memory_compression=True)
+            # use_mmap=True, use_memory_compression=True
+            )
 
         # if os.path.exists(self.replay_buffer_path):
         #     print("Restoring reply buffer")
