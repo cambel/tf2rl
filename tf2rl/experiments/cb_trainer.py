@@ -145,11 +145,12 @@ class Trainer:
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
-            self._use_nstep_rb, self._n_step)
+            self._use_nstep_rb, self._n_step, 
+            use_mmap=True, use_memory_compression=True)
 
         # if os.path.exists(self.replay_buffer_path):
         #     print("Restoring reply buffer")
-        #     replay_buffer.add(**restore_replay_buffer(self.replay_buffer_path))
+        #     replay_buffer.load_transitions(self.replay_buffer_path)
 
         obs = self._env.reset()
 
@@ -243,7 +244,7 @@ class Trainer:
                     self.update_policy(replay_buffer, save_summary=True)
                 replay_buffer.on_episode_end()
                 # Save replay buffer
-                # save_replay_buffer(replay_buffer, self.replay_buffer_path)
+                # replay_buffer.save(self.replay_buffer_path, safe=True)
 
                 episode_steps = 0
                 episode_return = 0
@@ -260,8 +261,8 @@ class Trainer:
             if total_steps % self._test_interval == 0:
                 print('=============== TESTING POLICY =================')
                 avg_test_return, avg_test_steps, success_rate = self.evaluate_policy(total_steps)
-                self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes".format(
-                    total_steps, avg_test_return, self._test_episodes))
+                self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes. Success rate {3: 3.1f}".format(
+                    total_steps, avg_test_return, self._test_episodes, success_rate))
                 tf.summary.scalar(
                     name="Common/average_test_return", data=avg_test_return)
                 tf.summary.scalar(

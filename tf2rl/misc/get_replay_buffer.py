@@ -46,12 +46,18 @@ def get_default_rb_dict(size, env):
 
 
 def get_replay_buffer(policy, env, use_prioritized_rb=False,
-                      use_nstep_rb=False, n_step=1, size=None):
+                      use_nstep_rb=False, n_step=1, size=None,
+                      use_mmap=False, use_memory_compression=False):
     if policy is None or env is None:
         return None
 
     obs_shape = get_space_size(env.observation_space)
     kwargs = get_default_rb_dict(policy.memory_capacity, env)
+
+    if use_memory_compression:
+        kwargs["next_of"] = "obs"
+    if use_mmap:
+        kwargs["mmap_prefix"] = "rb_data"
 
     if size is not None:
         kwargs["size"] = size
