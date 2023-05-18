@@ -77,7 +77,7 @@ class Trainer:
                     setattr(args, k, v)
                 else:
                     raise ValueError(f"{k} is invalid parameter.")
-        
+
         tf.random.set_seed(seed)
 
         self._set_from_args(args)
@@ -187,7 +187,7 @@ class Trainer:
                     action = self._policy.get_action(obs)
 
             st = rospy.get_time()
-            next_obs, reward, done, info = self._env.step(action)
+            next_obs, reward, done, truncated, info = self._env.step(action)
             total_agent_control_time += rospy.get_time() - st
 
             if self._show_progress:
@@ -341,7 +341,7 @@ class Trainer:
             avg_test_steps += 1
             for j in range(self._episode_max_steps):
                 action = self._policy.get_action(obs, test=True)
-                next_obs, reward, done, info = self._test_env.step(action)
+                next_obs, reward, done, trucated, info = self._test_env.step(action)
                 if info.get("success", False):
                     successes += 1
                 avg_test_steps += 1

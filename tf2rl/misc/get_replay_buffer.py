@@ -1,7 +1,7 @@
 import numpy as np
 import pickle 
-from gym.spaces.box import Box
-from gym.spaces.discrete import Discrete
+from gymnasium.spaces.box import Box
+from gymnasium.spaces.discrete import Discrete
 
 from cpprb import ReplayBuffer, PrioritizedReplayBuffer
 
