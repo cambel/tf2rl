@@ -77,7 +77,7 @@ class Trainer:
                     setattr(args, k, v)
                 else:
                     raise ValueError(f"{k} is invalid parameter.")
-        
+
         tf.random.set_seed(seed)
 
         self._set_from_args(args)
@@ -120,7 +120,7 @@ class Trainer:
         self._checkpoint = tf.train.Checkpoint(policy=self._policy)
         self.checkpoint_manager = tf.train.CheckpointManager(
             self._checkpoint, directory=self._output_dir, max_to_keep=5)
-        
+
         if model_dir is not None:
             assert os.path.isdir(model_dir)
             self._latest_path_ckpt = tf.train.latest_checkpoint(model_dir)
@@ -145,9 +145,9 @@ class Trainer:
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
-            self._use_nstep_rb, self._n_step, 
+            self._use_nstep_rb, self._n_step,
             # use_mmap=True, use_memory_compression=True
-            )
+        )
 
         # if os.path.exists(self.replay_buffer_path):
         #     print("Restoring reply buffer")
@@ -164,20 +164,20 @@ class Trainer:
             # Call the teacher policy here
             if self._teacher_policy and teaching_mode:
                 action = np.ones(self._env.n_actions)
-                action[:6] *= 1.0 # Slow motion
+                action[:6] *= 1.0  # Slow motion
 
-                ## Fix policy
+                # Fix policy
                 # action[2] = -0.75
-                
+
                 # Two step policy
                 xy_error = obs[:2]
                 # print(round(np.linalg.norm(xy_error), 4))
                 if np.linalg.norm(xy_error) < .02:
                     action[2] = -0.0
-                    action[6:] *= -0.5 # Half compliance
+                    action[6:] *= -0.5  # Half compliance
                 else:
                     action[2] = -0.9
-                    action[8] = 1.0 # High compliance
+                    action[8] = 1.0  # High compliance
                     action[6:] *= 0.75
 
             else:
@@ -195,9 +195,9 @@ class Trainer:
             episode_steps += 1
             episode_return += reward if not teaching_mode else 0
             total_steps += 1
-            
+
             actual_episode_steps += 1 if not teaching_mode else 0
-            
+
             tf.summary.experimental.set_step(total_steps)
 
             done_flag = done
@@ -212,10 +212,10 @@ class Trainer:
             success = info.get("success", False)
 
             if self._teacher_policy:
-                if collision and not teaching_mode: # start teaching mode on collision
+                if collision and not teaching_mode:  # start teaching mode on collision
                     teaching_mode = True
                     print('\033[36m' + "*** TEACHING MODE ON***" + '\033[0m')
-                elif teaching_mode and (collision or done): # stop if there is another collision or if the task is completed when in teaching mode
+                elif teaching_mode and (collision or done):  # stop if there is another collision or if the task is completed when in teaching mode
                     teaching_mode = False
                     print('\033[36m' + "*** TEACHING MODE OFF***" + '\033[0m')
 
@@ -237,9 +237,9 @@ class Trainer:
                 else:
                     performance_metric = -self._episode_max_steps
                 tf.summary.scalar(name="Common/performance_metric", data=performance_metric)
-                
+
                 obs = self._env.reset()
-                
+
                 # Update policy if defined to do so
                 if self._policy.update_interval == 0:
                     self.update_policy(replay_buffer, save_summary=True)
@@ -278,8 +278,8 @@ class Trainer:
                     if best_test_score < test_score:
                         print('*** Saving New Best Policy ***')
                         self.checkpoint_manager.save()
-                        best_test_score = test_score        
-                
+                        best_test_score = test_score
+
                 # Start a new episode
                 obs = self._env.reset()
 
