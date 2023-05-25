@@ -77,7 +77,7 @@ class Trainer:
                     setattr(args, k, v)
                 else:
                     raise ValueError(f"{k} is invalid parameter.")
-        
+
         tf.random.set_seed(seed)
 
         self._set_from_args(args)
@@ -120,7 +120,7 @@ class Trainer:
         self._checkpoint = tf.train.Checkpoint(policy=self._policy)
         self.checkpoint_manager = tf.train.CheckpointManager(
             self._checkpoint, directory=self._output_dir, max_to_keep=5)
-        
+
         if model_dir is not None:
             assert os.path.isdir(model_dir)
             self._latest_path_ckpt = tf.train.latest_checkpoint(model_dir)
@@ -145,41 +145,29 @@ class Trainer:
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
-            self._use_nstep_rb, self._n_step, 
+            self._use_nstep_rb, self._n_step,
             # use_mmap=True, use_memory_compression=True
-            )
+        )
 
         # if os.path.exists(self.replay_buffer_path):
         #     print("Restoring reply buffer")
         #     replay_buffer.load_transitions(self.replay_buffer_path)
 
         obs = self._env.reset()
+        if self._policy.n_warmup > 0:
+            obs = self._test_env.reset()
 
         teaching_mode = False
 
         actual_episode_steps = 0
         total_agent_control_time = 0.0
 
+        self.evaluate_policy(total_steps, save_summary=True)
+
         while total_steps < self._max_steps:
             # Call the teacher policy here
-            if self._teacher_policy and teaching_mode:
-                action = np.ones(self._env.n_actions)
-                action[:6] *= 1.0 # Slow motion
-
-                ## Fix policy
-                # action[2] = -0.75
-                
-                # Two step policy
-                xy_error = obs[:2]
-                # print(round(np.linalg.norm(xy_error), 4))
-                if np.linalg.norm(xy_error) < .02:
-                    action[2] = -0.0
-                    action[6:] *= -0.5 # Half compliance
-                else:
-                    action[2] = -0.9
-                    action[8] = 1.0 # High compliance
-                    action[6:] *= 0.75
-
+            if self._teacher_policy is not None and teaching_mode:
+                action = self._teacher_policy(self._env, obs)
             else:
                 if total_steps < self._policy.n_warmup:
                     action = self._env.action_space.sample()
@@ -187,7 +175,10 @@ class Trainer:
                     action = self._policy.get_action(obs)
 
             st = rospy.get_time()
-            next_obs, reward, done, info = self._env.step(action)
+            if total_steps < self._policy.n_warmup:
+                next_obs, reward, done, info = self._test_env.step(action)  # Use standarized environment for warmup
+            else:
+                next_obs, reward, done, info = self._env.step(action)
             total_agent_control_time += rospy.get_time() - st
 
             if self._show_progress:
@@ -195,9 +186,9 @@ class Trainer:
             episode_steps += 1
             episode_return += reward if not teaching_mode else 0
             total_steps += 1
-            
+
             actual_episode_steps += 1 if not teaching_mode else 0
-            
+
             tf.summary.experimental.set_step(total_steps)
 
             done_flag = done
@@ -211,11 +202,11 @@ class Trainer:
             collision = info.get("collision", False)
             success = info.get("success", False)
 
-            if self._teacher_policy:
-                if collision and not teaching_mode: # start teaching mode on collision
+            if self._teacher_policy is not None and total_steps > self._policy.n_warmup:
+                if collision and not teaching_mode:  # start teaching mode on collision
                     teaching_mode = True
                     print('\033[36m' + "*** TEACHING MODE ON***" + '\033[0m')
-                elif teaching_mode and (collision or done): # stop if there is another collision or if the task is completed when in teaching mode
+                elif teaching_mode and (collision or done):  # stop if there is another collision or if the task is completed when in teaching mode
                     teaching_mode = False
                     print('\033[36m' + "*** TEACHING MODE OFF***" + '\033[0m')
 
@@ -226,9 +217,8 @@ class Trainer:
                 time_per_step = (total_agent_control_time / episode_steps)
                 self.logger.info("Total Epi: {0: 5} Steps: {1: 7} Episode Steps: {2: 5} Return: {3: 5.4f} FPS: {4:5.2f} dt {5:5.2f}".format(
                     n_episode, total_steps, actual_episode_steps, episode_return, policy_time, time_per_step))
+
                 self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
-                tf.summary.scalar(name="Common/training_return", data=episode_return)
-                tf.summary.scalar(name="Common/training_episode_length", data=actual_episode_steps)
 
                 if collision:
                     performance_metric = -self._episode_max_steps * 2
@@ -236,10 +226,18 @@ class Trainer:
                     performance_metric = self._episode_max_steps - actual_episode_steps
                 else:
                     performance_metric = -self._episode_max_steps
-                tf.summary.scalar(name="Common/performance_metric", data=performance_metric)
-                
-                obs = self._env.reset()
-                
+
+                tf.summary.scalar(name="Train/training_return", data=episode_return)
+                tf.summary.scalar(name="Train/training_episode_length", data=actual_episode_steps)
+                tf.summary.scalar(name="Train/fps", data=1./(policy_time+time_per_step))
+                tf.summary.scalar(name="Train/agent_hz", data=1./time_per_step)
+                tf.summary.scalar(name="Train/performance_metric", data=performance_metric)
+
+                if total_steps < self._policy.n_warmup:
+                    obs = self._test_env.reset()
+                else:
+                    obs = self._env.reset()
+
                 # Update policy if defined to do so
                 if self._policy.update_interval == 0:
                     self.update_policy(replay_buffer, save_summary=True)
@@ -260,26 +258,15 @@ class Trainer:
                 continue
 
             if total_steps % self._test_interval == 0:
-                print('=============== TESTING POLICY =================')
-                avg_test_return, avg_test_steps, success_rate = self.evaluate_policy(total_steps)
-                self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes. Success rate {3: 3.1f}".format(
-                    total_steps, avg_test_return, self._test_episodes, success_rate))
-                tf.summary.scalar(
-                    name="Common/average_test_return", data=avg_test_return)
-                tf.summary.scalar(
-                    name="Common/average_test_episode_length", data=avg_test_steps)
-                tf.summary.scalar(name="Common/fps", data=1./(policy_time+time_per_step))
-                tf.summary.scalar(name="Common/agent_hz", data=1./time_per_step)
-                tf.summary.scalar(name="Common/success_rate", data=success_rate)
-                print('=============== END OF TESTING =================')
+                avg_test_return, avg_test_steps, success_rate = self.evaluate_policy(total_steps, save_summary=True)
 
                 if self._save_best_policy:
                     test_score = avg_test_return + (success_rate * 100)
                     if best_test_score < test_score:
                         print('*** Saving New Best Policy ***')
                         self.checkpoint_manager.save()
-                        best_test_score = test_score        
-                
+                        best_test_score = test_score
+
                 # Start a new episode
                 obs = self._env.reset()
 
@@ -321,38 +308,37 @@ class Trainer:
                 self.logger.info("Restored {}".format(self._latest_path_ckpt))
             self.evaluate_policy(total_steps=0)
 
-    def evaluate_policy(self, total_steps):
+    def evaluate_policy(self, total_steps, save_summary=False):
+        print('=============== TESTING POLICY =================')
+
         tf.summary.experimental.set_step(total_steps)
         if self._normalize_obs:
-            self._test_env.normalizer.set_params(
-                *self._env.normalizer.get_params())
-        avg_test_return = 0.
-        avg_test_steps = 0
+            self._test_env.normalizer.set_params(*self._env.normalizer.get_params())
+
+        test_fps = []
+        test_returns = []
+        test_steps_per_episode = []
         successes = 0.
         collisions = 0
         performance_metric = 0.
+
         if self._save_test_path:
-            replay_buffer = get_replay_buffer(
-                self._policy, self._test_env, size=self._episode_max_steps)
+            replay_buffer = get_replay_buffer(self._policy, self._test_env, size=self._episode_max_steps)
+
         for i in range(self._test_episodes):
             episode_return = 0.
-            frames = []
             obs = self._test_env.reset()
-            avg_test_steps += 1
+            total_act_time = 0.0
             for j in range(self._episode_max_steps):
                 action = self._policy.get_action(obs, test=True)
+                st = rospy.get_time()
                 next_obs, reward, done, info = self._test_env.step(action)
+                total_act_time += rospy.get_time() - st
                 if info.get("success", False):
                     successes += 1
-                avg_test_steps += 1
                 if self._save_test_path:
                     replay_buffer.add(obs=obs, act=action,
                                       next_obs=next_obs, rew=reward, done=done)
-
-                if self._save_test_movie:
-                    frames.append(self._test_env.render(mode='rgb_array'))
-                elif self._show_test_progress:
-                    self._test_env.render()
                 episode_return += reward
                 obs = next_obs
                 if done:
@@ -364,23 +350,47 @@ class Trainer:
                 performance_metric += self._episode_max_steps - j
             else:
                 performance_metric += -self._episode_max_steps
-            print('Test episode {0: 3} steps {1: 4} return {2:8.2f}'.format(i+1, j, episode_return))
+            dt = total_act_time/j
+            print('Test episode {0: 3} steps {1: 4} return {2:8.2f} dt {3:5.2f}'.format(i+1, j, episode_return, dt))
+
+            test_returns.append(episode_return)
+            test_steps_per_episode.append(j)
+            test_fps.append(dt)
+
             prefix = "step_{0:08d}_epi_{1:02d}_return_{2:010.4f}".format(total_steps, i, episode_return)
             if self._save_test_path:
                 save_path(replay_buffer._encode_sample(np.arange(self._episode_max_steps)),
                           os.path.join(self._output_dir, prefix + ".pkl"))
                 replay_buffer.clear()
-            if self._save_test_movie:
-                frames_to_gif(frames, prefix, self._output_dir)
-            avg_test_return += episode_return
+
         if self._show_test_images:
             images = tf.cast(
                 tf.expand_dims(np.array(obs).transpose(2, 0, 1), axis=3),
                 tf.uint8)
             tf.summary.image('train/input_img', images,)
-        tf.summary.scalar(name="Common/test_performance_metric", data=performance_metric/self._test_episodes)
-        tf.summary.scalar(name="Common/test_collisions", data=collisions)
-        return avg_test_return / self._test_episodes, avg_test_steps / self._test_episodes, successes / self._test_episodes
+
+        success_rate = successes / self._test_episodes
+        avg_test_return = np.average(test_returns)
+        std_test_return = np.std(test_returns)
+        avg_episode_length = np.average(test_steps_per_episode)
+        std_episode_length = np.std(test_steps_per_episode)
+
+        if save_summary:
+            self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes. Success rate {3: 3.1f}"
+                             .format(total_steps, avg_test_return, self._test_episodes, success_rate))
+
+            tf.summary.scalar(name="Test/performance_metric", data=performance_metric/self._test_episodes)
+            tf.summary.scalar(name="Test/num_of_collisions", data=collisions)
+            tf.summary.scalar(name="Test/avg_return", data=avg_test_return)
+            tf.summary.scalar(name="Test/std_return", data=std_test_return)
+            tf.summary.scalar(name="Test/avg_episode_length", data=avg_episode_length)
+            tf.summary.scalar(name="Test/std_episode_length", data=std_episode_length)
+            tf.summary.scalar(name="Test/fps", data=np.average(test_fps))
+            tf.summary.scalar(name="Test/success_rate", data=success_rate)
+
+        print('=============== END OF TESTING =================')
+
+        return avg_test_return, avg_episode_length, success_rate
 
     def _detailed_log(self, n_episode, total_steps, episode_steps, episode_return):
         logfile = self._output_dir + '/detailed_log.npy'
