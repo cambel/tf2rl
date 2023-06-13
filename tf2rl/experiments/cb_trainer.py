@@ -230,7 +230,7 @@ class Trainer:
                 tf.summary.scalar(name="Train/training_return", data=episode_return)
                 tf.summary.scalar(name="Train/training_episode_length", data=actual_episode_steps)
                 tf.summary.scalar(name="Train/fps", data=1./(policy_time+time_per_step))
-                tf.summary.scalar(name="Train/agent_hz", data=1./time_per_step)
+                tf.summary.scalar(name="Train/agent_hz", data=1./(time_per_step+1e8))
                 tf.summary.scalar(name="Train/performance_metric", data=performance_metric)
 
                 if total_steps < self._policy.n_warmup:
