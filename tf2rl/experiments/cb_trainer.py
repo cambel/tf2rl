@@ -57,7 +57,7 @@ class Trainer:
             args,
             seed=0,
             test_env=None,
-            teacher_policy=False,
+            teacher_policy=None,
             save_best_policy=False):
         """
         Initialize Trainer class
