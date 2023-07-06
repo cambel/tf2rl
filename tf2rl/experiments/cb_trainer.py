@@ -7,6 +7,7 @@ import argparse
 import numpy as np
 import tensorflow as tf
 from gym.spaces import Box
+import optuna
 
 from tf2rl.experiments.utils import save_path, frames_to_gif
 from tf2rl.misc.get_replay_buffer import get_replay_buffer, restore_replay_buffer, save_replay_buffer
@@ -58,7 +59,9 @@ class Trainer:
             seed=0,
             test_env=None,
             teacher_policy=False,
-            save_best_policy=False):
+            save_best_policy=False,
+            trial=None,
+            exp=None):
         """
         Initialize Trainer class
 
@@ -77,7 +80,7 @@ class Trainer:
                     setattr(args, k, v)
                 else:
                     raise ValueError(f"{k} is invalid parameter.")
-
+        
         tf.random.set_seed(seed)
 
         self._set_from_args(args)
@@ -102,6 +105,15 @@ class Trainer:
             logging_level=logging.getLevelName(args.logging_level),
             output_dir=self._output_dir)
 
+        if trial is not None:
+            index = self._output_dir.find("3d")
+            new_output = self._output_dir[:index+2] + "-trial_" +str(trial.number) + self._output_dir[index+2:]
+            self._output_dir = new_output
+        if exp is not None:
+            index = self._output_dir.find("3d")
+            new_output = self._output_dir[:index+2] + exp + self._output_dir[index+2:]
+            self._output_dir = new_output
+            
         if self._model_dir is None:
             self.replay_buffer_path = self._output_dir + '/replay_buffer.pkl'
         else:
@@ -115,12 +127,15 @@ class Trainer:
         self.writer = tf.summary.create_file_writer(self._output_dir)
         self.writer.set_as_default()
 
+        # setup optuna optimization
+        self.trial = trial
+
     def _set_check_point(self, model_dir):
         # Save and restore model
         self._checkpoint = tf.train.Checkpoint(policy=self._policy)
         self.checkpoint_manager = tf.train.CheckpointManager(
             self._checkpoint, directory=self._output_dir, max_to_keep=5)
-
+        
         if model_dir is not None:
             assert os.path.isdir(model_dir)
             self._latest_path_ckpt = tf.train.latest_checkpoint(model_dir)
@@ -145,13 +160,11 @@ class Trainer:
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
-            self._use_nstep_rb, self._n_step,
-            # use_mmap=True, use_memory_compression=True
-        )
+            self._use_nstep_rb, self._n_step)
 
         # if os.path.exists(self.replay_buffer_path):
         #     print("Restoring reply buffer")
-        #     replay_buffer.load_transitions(self.replay_buffer_path)
+        #     replay_buffer.add(**restore_replay_buffer(self.replay_buffer_path))
 
         obs = self._env.reset()
 
@@ -160,24 +173,26 @@ class Trainer:
         actual_episode_steps = 0
         total_agent_control_time = 0.0
 
+        total_cumulative_reward = 0
+
         while total_steps < self._max_steps:
             # Call the teacher policy here
             if self._teacher_policy and teaching_mode:
                 action = np.ones(self._env.n_actions)
-                action[:6] *= 1.0  # Slow motion
+                action[:6] *= 1.0 # Slow motion
 
-                # Fix policy
+                ## Fix policy
                 # action[2] = -0.75
-
+                
                 # Two step policy
                 xy_error = obs[:2]
                 # print(round(np.linalg.norm(xy_error), 4))
                 if np.linalg.norm(xy_error) < .02:
                     action[2] = -0.0
-                    action[6:] *= -0.5  # Half compliance
+                    action[6:] *= -0.5 # Half compliance
                 else:
                     action[2] = -0.9
-                    action[8] = 1.0  # High compliance
+                    action[8] = 1.0 # High compliance
                     action[6:] *= 0.75
 
             else:
@@ -195,9 +210,9 @@ class Trainer:
             episode_steps += 1
             episode_return += reward if not teaching_mode else 0
             total_steps += 1
-
+            
             actual_episode_steps += 1 if not teaching_mode else 0
-
+            
             tf.summary.experimental.set_step(total_steps)
 
             done_flag = done
@@ -212,10 +227,10 @@ class Trainer:
             success = info.get("success", False)
 
             if self._teacher_policy:
-                if collision and not teaching_mode:  # start teaching mode on collision
+                if collision and not teaching_mode: # start teaching mode on collision
                     teaching_mode = True
                     print('\033[36m' + "*** TEACHING MODE ON***" + '\033[0m')
-                elif teaching_mode and (collision or done):  # stop if there is another collision or if the task is completed when in teaching mode
+                elif teaching_mode and (collision or done): # stop if there is another collision or if the task is completed when in teaching mode
                     teaching_mode = False
                     print('\033[36m' + "*** TEACHING MODE OFF***" + '\033[0m')
 
@@ -237,15 +252,24 @@ class Trainer:
                 else:
                     performance_metric = -self._episode_max_steps
                 tf.summary.scalar(name="Common/performance_metric", data=performance_metric)
-
+                
                 obs = self._env.reset()
-
+                
                 # Update policy if defined to do so
                 if self._policy.update_interval == 0:
                     self.update_policy(replay_buffer, save_summary=True)
                 replay_buffer.on_episode_end()
                 # Save replay buffer
-                # replay_buffer.save(self.replay_buffer_path, safe=True)
+                # save_replay_buffer(replay_buffer, self.replay_buffer_path)
+
+                total_cumulative_reward += episode_return
+
+                # Send intermediate value of the current training episode to the current optuna trial
+                if self.trial is not None : 
+                    self.trial.report(episode_return, n_episode)
+                    if self.trial.should_prune():
+                        print("[PRUNED]")
+                        raise optuna.TrialPruned()
 
                 episode_steps = 0
                 episode_return = 0
@@ -262,8 +286,8 @@ class Trainer:
             if total_steps % self._test_interval == 0:
                 print('=============== TESTING POLICY =================')
                 avg_test_return, avg_test_steps, success_rate = self.evaluate_policy(total_steps)
-                self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes. Success rate {3: 3.1f}".format(
-                    total_steps, avg_test_return, self._test_episodes, success_rate))
+                self.logger.info("Evaluation Total Steps: {0: 7} Average Reward {1: 5.4f} over {2: 2} episodes".format(
+                    total_steps, avg_test_return, self._test_episodes))
                 tf.summary.scalar(
                     name="Common/average_test_return", data=avg_test_return)
                 tf.summary.scalar(
@@ -278,17 +302,18 @@ class Trainer:
                     if best_test_score < test_score:
                         print('*** Saving New Best Policy ***')
                         self.checkpoint_manager.save()
-                        best_test_score = test_score
-
+                        best_test_score = test_score        
+                
                 # Start a new episode
                 obs = self._env.reset()
 
             if not self._save_best_policy and total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
 
-        self.checkpoint_manager.save(999)
+        # self.checkpoint_manager.save(999)
 
         tf.summary.flush()
+        return total_cumulative_reward/n_episode
 
     def update_policy(self, replay_buffer, save_summary=False):
         samples = replay_buffer.sample(self._policy.batch_size)
