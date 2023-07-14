@@ -234,9 +234,9 @@ class Trainer:
             dist = info.get("dist", 0)
             force = info.get("force", 0)
             jerk = info.get("jerk", 0)
-            w_dist = obs[-9]
-            w_force = obs[-8]
-            w_jerk = obs[-7]
+            w_dist = obs[-4]
+            w_force = obs[-5]
+            w_jerk = obs[-6]
 
             if self._teacher_policy:
                 if collision and not teaching_mode: # start teaching mode on collision
