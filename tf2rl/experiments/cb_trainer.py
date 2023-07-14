@@ -174,8 +174,14 @@ class Trainer:
         total_agent_control_time = 0.0
 
         total_cumulative_reward = 0
+        # To evaluate the ability of the policy to learn, we will measure the difference between
+        # the average return value of the first half of the training 
+        # and the average return value of the second half
+        learning_range_first_half = 0
+        learning_range_second_half = 0
 
         while total_steps < self._max_steps:
+
             # Call the teacher policy here
             if self._teacher_policy and teaching_mode:
                 action = np.ones(self._env.n_actions)
@@ -225,6 +231,12 @@ class Trainer:
 
             collision = info.get("collision", False)
             success = info.get("success", False)
+            dist = info.get("dist", 0)
+            force = info.get("force", 0)
+            jerk = info.get("jerk", 0)
+            w_dist = obs[-9]
+            w_force = obs[-8]
+            w_jerk = obs[-7]
 
             if self._teacher_policy:
                 if collision and not teaching_mode: # start teaching mode on collision
@@ -251,7 +263,17 @@ class Trainer:
                     performance_metric = self._episode_max_steps - actual_episode_steps
                 else:
                     performance_metric = -self._episode_max_steps
+
                 tf.summary.scalar(name="Common/performance_metric", data=performance_metric)
+
+                # publish to TF reward the information about the distance, the force and the jerkiness
+                tf.summary.scalar(name="Common/dist", data=dist)
+                tf.summary.scalar(name="Common/force", data=force)
+                tf.summary.scalar(name="Common/jerk", data=jerk)                
+                tf.summary.scalar(name="Common/w_dist", data=w_dist)
+                tf.summary.scalar(name="Common/w_force", data=w_force)
+                tf.summary.scalar(name="Common/w_jerk", data=w_jerk)
+
                 
                 obs = self._env.reset()
                 
@@ -263,6 +285,8 @@ class Trainer:
                 # save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
                 total_cumulative_reward += episode_return
+                if total_steps < self._max_steps / 2 : learning_range_first_half += episode_return
+                else : learning_range_second_half += episode_return
 
                 # Send intermediate value of the current training episode to the current optuna trial
                 if self.trial is not None : 
@@ -311,9 +335,11 @@ class Trainer:
                 self.checkpoint_manager.save()
 
         # self.checkpoint_manager.save(999)
-
+        # Measuring the difference
+        learning_range = learning_range_second_half - learning_range_first_half
         tf.summary.flush()
-        return total_cumulative_reward/n_episode
+
+        return total_cumulative_reward/n_episode, learning_range/n_episode
 
     def update_policy(self, replay_buffer, save_summary=False):
         samples = replay_buffer.sample(self._policy.batch_size)
