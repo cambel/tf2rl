@@ -234,10 +234,12 @@ class Trainer:
             dist = info.get("dist", 0)
             force = info.get("force", 0)
             jerk = info.get("jerk", 0)
+            vel = info.get("vel", 0)
             cumulated_reward_details = info.get("cumulated_reward_details", np.zeros(3))
             r_dist = cumulated_reward_details[0]
             r_force = cumulated_reward_details[1]
             r_jerk = cumulated_reward_details[2]
+            r_vel = cumulated_reward_details[3]
             w_dist = obs[-4]
             w_force = obs[-5]
             w_jerk = obs[-6]
@@ -272,6 +274,7 @@ class Trainer:
 
                 # publish to TF reward the information about the distance, the force and the jerkiness
                 tf.summary.scalar(name="Common/dist", data=dist)
+                tf.summary.scalar(name="Common/vel", data=vel)
                 tf.summary.scalar(name="Common/force", data=force)
                 tf.summary.scalar(name="Common/jerk", data=jerk)                
                 tf.summary.scalar(name="Common/w_dist", data=w_dist)
@@ -280,6 +283,7 @@ class Trainer:
                 tf.summary.scalar(name="Common/r_dist", data=r_dist)
                 tf.summary.scalar(name="Common/r_force", data=r_force)
                 tf.summary.scalar(name="Common/r_jerk", data=r_jerk)
+                tf.summary.scalar(name="Common/r_vel", data=r_vel)
 
                 
                 obs = self._env.reset()
