@@ -23,7 +23,8 @@ class WaveFTActor(tf.keras.Model):
 
         prefix = "ur3e_gym"
         self.wrench_hist_size = rospy.get_param(prefix + "/wrench_hist_size", 12)
-        self.ft_size = rospy.get_param(prefix + "/ft_size", 6)
+        target_dims = rospy.get_param(prefix + "/target_dims")
+        self.ft_size = len(target_dims)
 
         self.x_l1 = layers.Dense(128, name="x_L1", activation=hidden_activation)
         self.x_l2 = layers.Dense(128, name="x_L2", activation=hidden_activation)
