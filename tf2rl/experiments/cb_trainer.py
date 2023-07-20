@@ -262,6 +262,7 @@ class Trainer:
                 self._detailed_log(n_episode, total_steps, episode_steps, episode_return)
                 tf.summary.scalar(name="Common/training_return", data=episode_return)
                 tf.summary.scalar(name="Common/training_episode_length", data=actual_episode_steps)
+                tf.summary.scalar(name="Common/computation_time", data=policy_time+time_per_step)
 
                 if collision:
                     performance_metric = -self._episode_max_steps * 2
