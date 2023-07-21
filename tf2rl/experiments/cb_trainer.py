@@ -157,6 +157,7 @@ class Trainer:
         episode_return = 0
         episode_start_time = time.perf_counter()
         n_episode = 0
+        current_learning_curve = np.array([])
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
@@ -235,14 +236,11 @@ class Trainer:
             force = info.get("force", 0)
             jerk = info.get("jerk", 0)
             vel = info.get("vel", 0)
-            cumulated_reward_details = info.get("cumulated_reward_details", np.zeros(3))
+            cumulated_reward_details = info.get("cumulated_reward_details", np.zeros(4))
             r_dist = cumulated_reward_details[0]
             r_force = cumulated_reward_details[1]
             r_jerk = cumulated_reward_details[2]
             r_vel = cumulated_reward_details[3]
-            w_dist = obs[-4]
-            w_force = obs[-5]
-            w_jerk = obs[-6]
 
             if self._teacher_policy:
                 if collision and not teaching_mode: # start teaching mode on collision
@@ -277,14 +275,19 @@ class Trainer:
                 tf.summary.scalar(name="Common/dist", data=dist)
                 tf.summary.scalar(name="Common/vel", data=vel)
                 tf.summary.scalar(name="Common/force", data=force)
-                tf.summary.scalar(name="Common/jerk", data=jerk)                
-                tf.summary.scalar(name="Common/w_dist", data=w_dist)
-                tf.summary.scalar(name="Common/w_force", data=w_force)
-                tf.summary.scalar(name="Common/w_jerk", data=w_jerk)                
+                tf.summary.scalar(name="Common/jerk", data=jerk)                   
                 tf.summary.scalar(name="Common/r_dist", data=r_dist)
                 tf.summary.scalar(name="Common/r_force", data=r_force)
                 tf.summary.scalar(name="Common/r_jerk", data=r_jerk)
                 tf.summary.scalar(name="Common/r_vel", data=r_vel)
+                use_dynamic_rewards = rospy.get_param("ur3e_gym/use_dynamic_rewards", False)
+                if use_dynamic_rewards:
+                    w_dist = obs[-6]
+                    w_force = obs[-5]
+                    w_jerk = obs[-4]           
+                    tf.summary.scalar(name="Common/w_dist", data=w_dist)
+                    tf.summary.scalar(name="Common/w_force", data=w_force)
+                    tf.summary.scalar(name="Common/w_jerk", data=w_jerk)  
 
                 
                 obs = self._env.reset()
@@ -296,6 +299,7 @@ class Trainer:
                 # Save replay buffer
                 # save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
+                np.append(current_learning_curve, episode_return)
                 total_cumulative_reward += episode_return
                 if total_steps < self._max_steps / 2 : learning_range_first_half += episode_return
                 else : learning_range_second_half += episode_return
@@ -351,7 +355,7 @@ class Trainer:
         learning_range = learning_range_second_half - learning_range_first_half
         tf.summary.flush()
 
-        return total_cumulative_reward/n_episode, learning_range/n_episode
+        return total_cumulative_reward/n_episode, learning_range/n_episode, current_learning_curve
 
     def update_policy(self, replay_buffer, save_summary=False):
         samples = replay_buffer.sample(self._policy.batch_size)
