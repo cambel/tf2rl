@@ -281,10 +281,11 @@ class Trainer:
                 tf.summary.scalar(name="Common/r_jerk", data=r_jerk)
                 tf.summary.scalar(name="Common/r_vel", data=r_vel)
                 use_dynamic_rewards = rospy.get_param("ur3e_gym/use_dynamic_rewards", False)
+                wrench_hist_size = rospy.get_param("ur3e_gym/wrench_hist_size", 1)
                 if use_dynamic_rewards:
-                    w_dist = obs[-6]
-                    w_force = obs[-5]
-                    w_jerk = obs[-4]           
+                    w_dist = obs[-3 - 3*wrench_hist_size]
+                    w_force = obs[-2 - 3*wrench_hist_size]
+                    w_jerk = obs[-1 - 3*wrench_hist_size]           
                     tf.summary.scalar(name="Common/w_dist", data=w_dist)
                     tf.summary.scalar(name="Common/w_force", data=w_force)
                     tf.summary.scalar(name="Common/w_jerk", data=w_jerk)  
