@@ -105,10 +105,10 @@ class Trainer:
             logging_level=logging.getLevelName(args.logging_level),
             output_dir=self._output_dir)
 
-        if trial is not None:
-            index = self._output_dir.find("3d")
-            new_output = self._output_dir[:index+2] + "-trial_" +str(trial.number) + self._output_dir[index+2:]
-            self._output_dir = new_output
+        # if trial is not None:
+        #     index = self._output_dir.find("3d")
+        #     new_output = self._output_dir[:index+2] + "-trial_" +str(trial.number) + self._output_dir[index+2:]
+        #     self._output_dir = new_output
         if exp is not None:
             index = self._output_dir.find("3d")
             new_output = self._output_dir[:index+2] + exp + self._output_dir[index+2:]
@@ -300,7 +300,7 @@ class Trainer:
                 # Save replay buffer
                 # save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
-                np.append(current_learning_curve, episode_return)
+                current_learning_curve = np.append(current_learning_curve, episode_return)
                 total_cumulative_reward += episode_return
                 if total_steps < self._max_steps / 2 : learning_range_first_half += episode_return
                 else : learning_range_second_half += episode_return
