@@ -157,7 +157,6 @@ class Trainer:
         episode_return = 0
         episode_start_time = time.perf_counter()
         n_episode = 0
-        current_learning_curve = np.array([])
 
         replay_buffer = get_replay_buffer(
             self._policy, self._env, self._use_prioritized_rb,
@@ -300,7 +299,6 @@ class Trainer:
                 # Save replay buffer
                 # save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
-                current_learning_curve = np.append(current_learning_curve, episode_return)
                 total_cumulative_reward += episode_return
                 if total_steps < self._max_steps / 2 : learning_range_first_half += episode_return
                 else : learning_range_second_half += episode_return
@@ -356,7 +354,7 @@ class Trainer:
         learning_range = learning_range_second_half - learning_range_first_half
         tf.summary.flush()
 
-        return total_cumulative_reward/n_episode, learning_range/n_episode, current_learning_curve
+        return total_cumulative_reward/n_episode, learning_range/n_episode
 
     def update_policy(self, replay_buffer, save_summary=False):
         samples = replay_buffer.sample(self._policy.batch_size)
