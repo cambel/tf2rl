@@ -162,9 +162,9 @@ class Trainer:
             self._policy, self._env, self._use_prioritized_rb,
             self._use_nstep_rb, self._n_step)
 
-        # if os.path.exists(self.replay_buffer_path):
-        #     print("Restoring reply buffer")
-        #     replay_buffer.add(**restore_replay_buffer(self.replay_buffer_path))
+        if os.path.exists(self.replay_buffer_path):
+            print("Restoring reply buffer")
+            replay_buffer.add(**restore_replay_buffer(self.replay_buffer_path))
 
         obs = self._env.reset()
 
@@ -296,8 +296,6 @@ class Trainer:
                 if self._policy.update_interval == 0:
                     self.update_policy(replay_buffer, save_summary=True)
                 replay_buffer.on_episode_end()
-                # Save replay buffer
-                # save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
                 total_cumulative_reward += episode_return
                 if total_steps < self._max_steps / 2 : learning_range_first_half += episode_return
@@ -348,6 +346,8 @@ class Trainer:
 
             if not self._save_best_policy and total_steps % self._save_model_interval == 0:
                 self.checkpoint_manager.save()
+                # Save replay buffer
+                save_replay_buffer(replay_buffer, self.replay_buffer_path)
 
         # self.checkpoint_manager.save(999)
         # Measuring the difference
