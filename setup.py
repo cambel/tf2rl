@@ -2,7 +2,7 @@ import platform
 from setuptools import setup, find_packages
 
 install_requires = [
-    "cpprb>=8.1.1",
+    "cpprb==10.0.0",
     "setuptools>=41.0.0",
     "numpy>=1.16.0",
     "joblib",
