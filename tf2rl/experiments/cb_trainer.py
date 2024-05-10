@@ -7,7 +7,6 @@ import argparse
 import numpy as np
 import tensorflow as tf
 from gym.spaces import Box
-import optuna
 
 from tf2rl.experiments.utils import save_path, frames_to_gif
 from tf2rl.misc.get_replay_buffer import get_replay_buffer, restore_replay_buffer, save_replay_buffer
@@ -126,9 +125,6 @@ class Trainer:
         # prepare TensorBoard output
         self.writer = tf.summary.create_file_writer(self._output_dir)
         self.writer.set_as_default()
-
-        # setup optuna optimization
-        self.trial = trial
 
     def _set_check_point(self, model_dir):
         # Save and restore model
@@ -300,13 +296,6 @@ class Trainer:
                 total_cumulative_reward += episode_return
                 if total_steps < self._max_steps / 2 : learning_range_first_half += episode_return
                 else : learning_range_second_half += episode_return
-
-                # Send intermediate value of the current training episode to the current optuna trial
-                if self.trial is not None : 
-                    self.trial.report(episode_return, n_episode)
-                    if self.trial.should_prune():
-                        print("[PRUNED]")
-                        raise optuna.TrialPruned()
 
                 episode_steps = 0
                 episode_return = 0
