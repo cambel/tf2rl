@@ -230,7 +230,7 @@ class Trainer:
                 tf.summary.scalar(name="Train/training_return", data=episode_return)
                 tf.summary.scalar(name="Train/training_episode_length", data=actual_episode_steps)
                 tf.summary.scalar(name="Train/fps", data=1./(policy_time+time_per_step))
-                tf.summary.scalar(name="Train/agent_hz", data=1./(time_per_step+1e8))
+                tf.summary.scalar(name="Train/agent_hz", data=1./(time_per_step+1e-8))
                 tf.summary.scalar(name="Train/performance_metric", data=performance_metric)
 
                 if total_steps < self._policy.n_warmup:
@@ -350,7 +350,7 @@ class Trainer:
                 performance_metric += self._episode_max_steps - j
             else:
                 performance_metric += -self._episode_max_steps
-            dt = total_act_time/j
+            dt = total_act_time/(j+1e-8)
             print('Test episode {0: 3} steps {1: 4} return {2:8.2f} dt {3:5.2f}'.format(i+1, j, episode_return, dt))
 
             test_returns.append(episode_return)
